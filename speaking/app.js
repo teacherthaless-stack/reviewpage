@@ -43,3 +43,43 @@ function answer(t){t=t.trim();if(!t)return;state.messages.push({role:'you',text:
 function toggleMic(){if(localStorage.getItem('hea_mic')==='blocked')return $('messageInput').focus();if(state.listening&&state.recognition){state.manualStop=true;state.recognition.stop();return}let R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){localStorage.setItem('hea_mic','blocked');render();return}let r=new R();state.recognition=r;state.heard='';state.manualStop=false;r.lang='en-US';r.interimResults=true;r.continuous=true;r.onresult=e=>{state.heard=Array.from(e.results).map(x=>x[0].transcript).join(' ')};r.onerror=()=>{state.listening=false;state.recognition=null;localStorage.setItem('hea_mic','blocked');render()};r.onend=()=>{if(state.manualStop){let said=state.heard.trim();state.recognition=null;state.listening=false;if(said)answer(said);else render();return}if(state.listening){try{r.start()}catch{state.listening=false;render()}}};state.listening=true;render();r.start()}
 function speak(t){if('speechSynthesis'in window){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=state.level==='Basic'?.78:.9;speechSynthesis.speak(u)}}
 function translateLast(){let last=[...state.messages].reverse().find(m=>m.role==='ai')?.text||'';let help=last.includes('What do you')?'Em português: a pergunta é “O que você faz / gosta / quer…?” Responda com uma frase simples.':last.includes('How did you feel')?'Em português: a pergunta é “Como você se sentiu?” Você pode começar com: “I felt…”':last.includes('What happened')?'Em português: a pergunta é “O que aconteceu depois?” Conte o próximo passo da sua história.':'Em português: a IA está pedindo que você fale um pouco mais sobre a sua ideia. Você pode responder com uma frase curta — sem pressa.';state.messages.push({role:'ai',text:`🇧🇷 ${help}`});render()}
+
+/* A warmer, more expressive conversation partner—without pretending to know more than the student said. */
+function reply(raw){
+  let t=cleanSpeech(raw).toLowerCase(),count=state.messages.filter(m=>m.role==='you').length,basic=state.level==='Basic',sets=[];
+  const pick=(simple,natural)=>basic?simple:natural;
+  if(/happy|great|awesome|amazing|love|excited|fun/.test(t))sets=pick(
+    ['That sounds great! What did you like most?','Oh, nice! Tell me one more thing.','I am happy you enjoyed it. Why was it fun?'],
+    ['Oh, I love the energy in that. What was the best part?','That sounds genuinely fun — I can see why you enjoyed it. What made it stand out?','Okay, that put a smile on my face. Would you do it again?','I’m glad your day had a moment like that. Who did you share it with?']);
+  else if(/sad|bad|upset|angry|stress|worried|difficult|hard|tired|exhausted/.test(t))sets=pick(
+    ['I am sorry. Take your time. What happened?','That sounds difficult. Do you want to tell me more?','I understand. What can help you feel better?'],
+    ['Oh, that sounds heavy. Take your time — I’m right here with you. What happened?','I’m sorry you had to deal with that. Was there one part that felt especially difficult?','That would wear anyone out. What usually helps you reset after a day like that?','I can understand why that stayed with you. How are you feeling about it now?']);
+  else if(/home|chill|relax|nothing much|not much/.test(t))sets=pick(
+    ['A calm day is okay. Do you like music or TV?','That sounds relaxing. What will you do later?','Nice. How do you relax at home?'],
+    ['Honestly, a quiet evening at home sounds pretty good to me too. What helps you relax most?','I get that — sometimes doing very little is exactly the plan. Music, a show, or just silence?','That has a cozy feeling. What is your favorite way to switch off after a long day?','I’m a fan of a peaceful evening too. Is there anything you are looking forward to later?']);
+  else if(/work|job|meeting|boss/.test(t))sets=pick(
+    ['Was work busy today?','What do you do at work?','Did you like your day at work?'],
+    ['Work can change the whole mood of a day. What part took the most energy?','That sounds like a full day. Was there at least one good moment in it?','I can imagine that took a lot out of you. What do you enjoy most about your job?','I’m curious — if you could change one thing about today at work, what would it be?']);
+  else if(/friend|family|mom|dad|sister|brother/.test(t))sets=pick(
+    ['That is nice. What did you do together?','Do you see them often?','How did you feel?'],
+    ['Aw, I like hearing about moments with people you care about. What did you do together?','That sounds like it meant something to you. Was it planned, or was it spontaneous?','Those everyday moments with family or friends can be the best. Did anything funny happen?','I can picture that. What is one thing you always enjoy doing with them?']);
+  else if(/food|restaurant|cook|eat/.test(t))sets=pick(
+    ['What did you eat?','Was it good?','Do you like cooking?'],
+    ['Now you have me curious — what was the best thing you ate?','That sounds delicious. I would want to try that too. Would you order it again?','Food is such a good part of a day. Was it something you made or something you bought?','Okay, you are making me hungry now. What do you usually choose when you want comfort food?']);
+  else if(/music|song|movie|film|series|netflix|game/.test(t))sets=pick(
+    ['What do you like about it?','Who is your favorite?','Would you tell a friend to try it?'],
+    ['Okay, you have my attention. What made it so good?','I love when a song, game, or show can change your mood. What do you like about it?','That sounds like something I would be curious to try. Would you recommend it to a friend?','I can tell it made an impression on you. Is there a favorite moment or character?']);
+  else if(/travel|trip|beach|hotel|flight|airport/.test(t))sets=pick(
+    ['Where did you go?','Did you like the trip?','What was your favorite part?'],
+    ['I’m a little jealous — travel always gives us a story. What was your favorite moment?','That sounds like a lovely memory. What made the place special for you?','I can picture that scene. Did anything unexpected happen on the trip?','If I could visit with you for one hour, where would you take me first?']);
+  else if(/school|study|class|exam/.test(t))sets=pick(
+    ['What are you studying?','Was your class easy or difficult?','What do you want to learn?'],
+    ['I know studying can take patience. Which part felt easiest today?','That is worth being proud of — what are you working on right now?','I’m cheering for you. What helps you stay focused when studying gets difficult?','Was there a moment in class when something finally made sense? I love those moments.']);
+  else if(t.split(/\s+/).length<4)sets=pick(
+    ['No problem. Take your time. Can you say one more sentence?','It is okay. Tell me a little more.','What do you mean?'],
+    ['No rush at all — I’m listening. What is the next part of the story?','That makes sense. I’d love to hear one more detail.','I want to understand you better. What do you mean by that?']);
+  else sets=pick(
+    ['I understand. Can you tell me more?','That is interesting. What happened next?','How did you feel?'],
+    ['I’m really following you. What part of that felt most important?','That gives me a clearer picture. What happened after that?','I can see why that stayed with you. How did it make you feel?','That is interesting — what do you think you learned from it?','I like the way you explained that. What would you tell a friend about it?','You have me curious now. What is one small detail people might not expect?']);
+  let unused=sets.filter(x=>!used(x));return unused[(count+unused.length)%unused.length]||sets[count%sets.length];
+}
