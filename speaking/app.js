@@ -127,3 +127,36 @@ async function answer(t){
   }
 }
 async function speak(t){speechSynthesis?.cancel();let base=teacherApi();if(base){try{let response=await fetch(`${base}/api/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,level:state.level})});if(response.ok){let audio=new Audio(URL.createObjectURL(await response.blob()));await audio.play();return}}catch{}}if('speechSynthesis'in window){let u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=state.level==='Basic'?.78:.9;speechSynthesis.speak(u)}}
+
+/* Never skip a question from the student in the offline fallback. */
+const emmaConversationFallback=reply;
+reply=function(raw){
+  const t=cleanSpeech(raw).toLowerCase();
+  const basic=state.level==='Basic';
+  const asksAboutEmma=/\b(how about you|what about you|how are you|how is your day|what'?s your day like)\b/.test(t);
+  const asksOpinion=/\b(do you like|what do you think|what is your favorite|what'?s your favorite)\b/.test(t);
+  const hasGoodDay=/\b(good|great|nice|fine|pretty good|well)\b/.test(t);
+
+  if(asksAboutEmma){
+    if(basic)return hasGoodDay
+      ? 'I’m doing well, thank you! I do not have a day like you do, but I am happy to talk with you. What made your day good?'
+      : 'I’m doing well, thank you! I’m here and ready to listen. How are you feeling today?';
+    return hasGoodDay
+      ? 'I’m doing well too, thank you — and I’m genuinely glad your day has been good. I don’t experience a day in the human way, but this conversation is a nice part of mine. What made your day good?'
+      : 'I’m doing well, thank you. I don’t experience a day in the human way, but I’m very glad to be here with you. How are you feeling today?';
+  }
+
+  if(asksOpinion){
+    return basic
+      ? 'That is a good question. I do not have personal favorites, but I like hearing your ideas. What do you think?'
+      : 'That is a good question. I do not have personal favorites or experiences, but I can still think it through with you. What do you like about it?';
+  }
+
+  if(hasGoodDay){
+    return basic
+      ? 'I’m happy to hear that! What was the best part of your day?'
+      : 'I’m really glad to hear that. What happened that made your day feel good?';
+  }
+
+  return emmaConversationFallback(raw);
+};
