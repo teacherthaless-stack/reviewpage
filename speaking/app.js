@@ -93,6 +93,7 @@ Object.assign(welcome,{
 state.responding=false;
 const teacherApi=()=>String(window.TEACHER_EMMA_API_URL||localStorage.getItem('teacher_emma_api_url')||'').replace(/\/$/,'');
 const teacherHistory=()=>state.messages.slice(-20).map(m=>({role:m.role==='you'?'user':'assistant',content:m.text}));
+const waitForEmma=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function teacherFallback(text){return reply(text)}
 async function getTeacherReply(text){
   let base=teacherApi();
@@ -104,5 +105,25 @@ async function getTeacherReply(text){
   return data.reply.trim();
 }
 function conversation(){let blocked=localStorage.getItem('hea_mic')==='blocked',basic=state.level==='Basic';return layout(`<section class="conversation"><header class="conversation-header"><div><div class="eyebrow">TEACHER EMMA · AI ENGLISH TUTOR</div><strong style="font-size:13px">${esc(state.topic)} conversation</strong></div><div><span class="level-pill">${state.level.toUpperCase()}</span> <button class="end-btn" onclick="endSession()">END SESSION</button></div></header><div class="chat" id="chat">${state.messages.map(m=>`<div class="message ${m.role==='you'?'you':''}"><div class="speaker">${m.role==='you'?initials():'EMMA'}</div><div class="bubble">${esc(m.text)}</div></div>`).join('')}${state.responding?'<div class="message"><div class="speaker">EMMA</div><div class="bubble">Teacher Emma is thinking…</div></div>':''}</div><div class="voice-stage"><div class="status">${state.responding?'EMMA IS PREPARING HER RESPONSE':state.listening?'EMMA IS LISTENING — TAKE YOUR TIME':blocked?'MICROPHONE UNAVAILABLE':'TAP TO SPEAK WITH EMMA'}</div><button class="mic ${state.listening?'listening':''}" onclick="toggleMic()" ${state.responding?'disabled':''} aria-label="Tap to start or finish speaking">🎙</button><div class="voice-hint">${state.responding?'PLEASE WAIT A MOMENT':state.listening?'TAP AGAIN WHEN YOU ARE FINISHED':'TAP TO SPEAK'}</div><div class="secondary-actions"><button class="link-button" onclick="toggleText()">TYPE INSTEAD</button>${basic?'<button class="link-button" onclick="translateLast()">🇧🇷 PORTUGUESE HELP</button>':''}<button class="link-button" onclick="idea()">💡 GIVE ME AN IDEA</button><button class="link-button" onclick="help()">NEED HELP?</button></div><div class="help-menu hidden" id="help"><button onclick="assist('word')">Give me a word</button><button onclick="assist('simple')">Simplify the question</button><button onclick="assist('example')">Give me an example</button></div><form id="textbar" class="textbar" onsubmit="sendText(event)"><input id="messageInput" placeholder="Type your answer in English…"><button class="send">SEND</button></form><p class="login-note" style="margin-top:12px">Teacher Emma is an AI tutor, not a real person.</p></div></section>`) }
-async function answer(t){t=t.trim();if(!t||state.responding)return;state.messages.push({role:'you',text:t});state.listening=false;state.responding=true;render();try{let replyText=await getTeacherReply(t);state.messages.push({role:'ai',text:replyText});state.responding=false;render();speak(replyText)}catch{state.responding=false;state.messages.push({role:'ai',text:'I’m sorry — I had a connection problem. Please try again in a moment.'});render()}}
+async function answer(t){
+  t=t.trim();
+  if(!t||state.responding)return;
+  state.messages.push({role:'you',text:t});
+  state.listening=false;
+  state.responding=true;
+  render();
+  // Emma never answers a pause. This is only reached after the student finishes with a second tap or SEND.
+  const naturalThinkingTime=Math.min(2400,700+t.split(/\s+/).filter(Boolean).length*55);
+  try{
+    const [replyText]=await Promise.all([getTeacherReply(t),waitForEmma(naturalThinkingTime)]);
+    state.messages.push({role:'ai',text:replyText});
+    state.responding=false;
+    render();
+    speak(replyText);
+  }catch{
+    state.responding=false;
+    state.messages.push({role:'ai',text:'I’m sorry — I had a connection problem. Please try again in a moment.'});
+    render();
+  }
+}
 async function speak(t){speechSynthesis?.cancel();let base=teacherApi();if(base){try{let response=await fetch(`${base}/api/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,level:state.level})});if(response.ok){let audio=new Audio(URL.createObjectURL(await response.blob()));await audio.play();return}}catch{}}if('speechSynthesis'in window){let u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=state.level==='Basic'?.78:.9;speechSynthesis.speak(u)}}
