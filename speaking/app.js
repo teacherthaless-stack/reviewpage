@@ -160,3 +160,51 @@ reply=function(raw){
 
   return emmaConversationFallback(raw);
 };
+
+/* Richer offline dialogue: varied, topic-aware responses until the live AI service is connected. */
+const emmaPreviousReply=reply;
+const emmaStopWords=new Set(['about','after','again','been','because','could','does','feel','from','good','have','here','just','like','more','much','really','said','some','that','then','there','they','this','today','very','what','when','with','would','your']);
+const emmaFreshPick=(choices)=>{
+  const said=new Set(state.messages.filter(m=>m.role==='ai').map(m=>m.text));
+  const fresh=choices.filter(choice=>!said.has(choice));
+  const pool=fresh.length?fresh:choices;
+  return pool[state.messages.filter(m=>m.role==='you').length%pool.length];
+};
+reply=function(raw){
+  const t=cleanSpeech(raw).toLowerCase();
+  const basic=state.level==='Basic';
+  const turn=state.messages.filter(m=>m.role==='you').length;
+  const directQuestion=/\b(how about you|what about you|how are you|how is your day|what'?s your day like)\b/.test(t);
+  const goodDay=/\b(good|great|nice|fine|pretty good|well)\b/.test(t);
+
+  if(directQuestion){
+    const warm=basic
+      ? ['I’m doing well, thank you! I am happy to be here with you. What made your day good?','I’m good, thank you for asking! I do not have a day like you, but I am ready to listen. What was nice about your day?','I’m well, thank you! Tell me: what was the best part of your day?']
+      : ['I’m doing well, thank you — and I’m glad you asked. I don’t experience a day in the human way, but I’m fully here with you. What made your day good?','I’m good, thanks for asking. I don’t have my own day to report, but I’m enjoying hearing about yours. What was the highlight?','I’m well, thank you. It’s kind of you to ask. I’m curious: was there one small moment that made today feel good?','I’m doing well. I may be an AI tutor, but I still appreciate the question. What happened today that put you in a good mood?'];
+    return emmaFreshPick(warm);
+  }
+
+  if(goodDay){
+    const followUps=basic
+      ? ['That is great! What was the best part?','I am happy to hear that! What did you do today?','Nice! Did something special happen?','That sounds good. Who were you with?']
+      : ['That’s lovely to hear. What happened that made the day feel good?','I’m glad your day went well. Was it one big thing, or lots of small good moments?','That sounds like a win. What is the first moment from today that you would tell a friend about?','I like hearing that. Did anyone else help make your day better?','Good days are worth noticing. What would you like to remember about this one?','That gives the conversation a nice start. What did you enjoy most?'];
+    return emmaFreshPick(followUps);
+  }
+
+  const routes=[
+    [/\b(work|job|office|meeting|boss)\b/, basic?['What happened at work?','Was work easy or hard today?','What was the best part of work?']:['That sounds like it shaped your day. What was the moment at work you keep thinking about?','Was the busy part of work satisfying, or was it mostly stressful?','I’m curious what your workday is usually like. What part do you enjoy most?','Did something small happen at work that changed your mood?']],
+    [/\b(friend|family|mother|father|mom|dad|sister|brother)\b/, basic?['That sounds nice. What did you do together?','How did you feel with them?','Do you see them often?']:['I like that this involved people close to you. What did you enjoy about being together?','That sounds meaningful. Was it a planned moment or something that just happened?','Did anyone say or do something that made you smile?','What is one thing you always enjoy doing with them?']],
+    [/\b(movie|film|series|netflix|show|song|music|game)\b/, basic?['What do you like about it?','Who is your favorite?','Would you tell a friend to try it?']:['Okay, now I’m interested. What pulled you into it?','Was it the story, the music, or a character that made it memorable?','Would you recommend it to me? Give me your honest opinion.','What mood does it put you in?']],
+    [/\b(food|restaurant|cook|cooking|eat|dinner|lunch)\b/, basic?['What did you eat?','Was it delicious?','Do you cook often?']:['You’ve made me curious about the food now. What made it so good?','Was it a familiar comfort meal or something new?','If you could have that again tomorrow, would you?','Who would you want to share that meal with?']],
+    [/\b(travel|trip|beach|hotel|flight|airport|holiday)\b/, basic?['Where did you go?','What was your favorite part?','Did you like the trip?']:['That sounds like it came with a story. What is the first image you remember from the trip?','Was there a moment that surprised you while you were there?','What made that place feel different from home?','If you went back tomorrow, what would you do first?']]
+  ];
+  for(const [pattern,choices] of routes)if(pattern.test(t))return emmaFreshPick(choices);
+
+  const detail=cleanSpeech(raw).split(/\s+/).filter(word=>word.length>3&&!emmaStopWords.has(word.toLowerCase())).slice(-3).join(' ');
+  if(detail&&turn>1){
+    return emmaFreshPick(basic
+      ? [`You said ${detail}. Can you tell me more?`,`I understand. What happened next?`,`How did that make you feel?`]
+      : [`You mentioned ${detail}. I want to stay with that for a moment — why did it stand out to you?`,`I’m following you. What happened just before that?`,`That sounds like an important detail. How did you react in that moment?`,`I can picture part of the story now. What would you add so I can understand it better?`,`There is something interesting there. What do you think it says about your day?`]);
+  }
+  return emmaPreviousReply(raw);
+};
